@@ -1,0 +1,8 @@
+# dsh-balance-badge bundle patch.
+#
+# The package is client-only in practice: this single row mounts it so the
+# browser half (`./client`) reaches the page. Toggling the bundle off in
+# 设置 → 插件 / 侧边栏「插件」 removes the badge again.
+- insert:
+    - id: dsh-balance-badge
+      name: 'dsh-balance-badge'

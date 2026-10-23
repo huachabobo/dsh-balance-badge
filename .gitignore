@@ -1,0 +1,14 @@
+# dependencies
+node_modules/
+pnpm-lock.yaml
+package-lock.json
+
+# local test output
+scripts/out/
+*.log
+
+# editors / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

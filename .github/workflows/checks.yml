@@ -1,0 +1,31 @@
+name: checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Only the rendering tests need a React pair; the bundle itself takes React
+      # from the shell's static module table at runtime.
+      - run: npm install --no-audit --no-fund react@18.3.1 react-dom@18.3.1
+
+      - name: Locale keys (zh/en parity)
+        run: node scripts/check-locales.mjs
+
+      - name: Host opener route
+        run: node scripts/check-host-route.mjs
+
+      - name: Client bundle rendering
+        run: node scripts/smoke-test.mjs

@@ -1,0 +1,5 @@
+# Keep line endings identical on every platform so the CI diff and the
+# authored bundle never churn.
+* text=auto eol=lf
+*.png binary
+*.ico binary

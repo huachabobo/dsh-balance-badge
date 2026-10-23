@@ -1,0 +1,56 @@
+{
+  "name": "dsh-balance-badge",
+  "version": "1.4.0",
+  "description": "Show the DeepSeek account balance right under the DSH composer, with a spend curve and per-session attribution",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "balance",
+    "usage",
+    "cordis"
+  ],
+  "license": "MIT",
+  "author": "huachabobo",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/huachabobo/dsh-balance-badge.git"
+  },
+  "homepage": "https://github.com/huachabobo/dsh-balance-badge#readme",
+  "bugs": {
+    "url": "https://github.com/huachabobo/dsh-balance-badge/issues"
+  },
+  "scripts": {
+    "check": "node scripts/check-locales.mjs && node scripts/check-host-route.mjs && node scripts/smoke-test.mjs",
+    "check:composition": "node scripts/check-composition.mjs"
+  },
+  "devDependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  }
+}
