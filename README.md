@@ -106,21 +106,25 @@ pnpm install
 
 ## 插件市场
 
-已收录进 **DSH 1024Store** 目录（[提交 PR #673](https://github.com/imsai-sh/awesome-deepseek-harness-plugins/pull/673) 通过自动化静态检查后自动合并，条目文件：[`huachabobo--dsh-balance-badge.json`](https://github.com/imsai-sh/awesome-deepseek-harness-plugins/blob/main/catalog/plugins/huachabobo--dsh-balance-badge.json)）。
+已收录进 **DSH 1024Store** 目录（[提交 PR #673](https://github.com/imsai-sh/awesome-deepseek-harness-plugins/pull/673) 通过自动化静态检查后自动合并，条目文件：[`huachabobo--dsh-balance-badge.json`](https://github.com/imsai-sh/awesome-deepseek-harness-plugins/blob/main/catalog/plugins/huachabobo--dsh-balance-badge.json)）。目录已同步到站点，`https://deepseek1024.com/api/v2/plugins?q=dsh-balance-badge` 现在能查到它。
 
-> **当前是 browse-only。** 1024Store 的安装命令来自 npm 上的同名包：目录只负责收录与展示，能不能一键装取决于有没有发布到 npm。要在「社区插件市场 → 可安装」里出现并直接装，需要先发 npm（本项目还没发布）：
+**今天就能装**（目录给的 GitHub 直装命令，不依赖 npm）：
+
+```powershell
+dsh plugin --profile <你的 profile> add github:huachabobo/dsh-balance-badge
+```
+
+**一键安装（市场里的「可安装」）还差 npm 发布**：1024Store 的自动安装只认 npm 上的同名包，版本与安装命令都解析 npm 的 `latest`。包还没发布时，市场里能浏览、能看仓库和截图，但不会给出 npm 安装按钮。
+
+发布命令（第一次、以及以后每次升版本）：
 
 ```powershell
 cd dsh-balance-badge
-npm login                       # 你的 npm 账号
-npm publish --access public     # prepublishOnly 会先跑 npm run check
+npm login                       # 只需一次
+npm publish --access public     # 会被要求输入 6 位 2FA 动态码；prepublishOnly 会先跑 npm run check
 ```
 
-发布后：
-
-- 市场会自动检测到这个 npm 包（它的 `dsh.bundle` 声明已验证），条目从 browse-only 变成可安装，安装命令是 `dsh plugin --profile <name> add dsh-balance-badge`；
-- 也可以直接用 CLI：`dsh plugin add dsh-balance-badge`；
-- 版本升级时改 `version` 再 `npm publish`，市场展示的安装命令始终解析 npm 的 `latest`。
+发布后不需要再改任何东西：1024Store 自动检测到 npm 上的新包，条目从 browse-only 变成可安装，安装命令变成 `dsh plugin --profile <name> add dsh-balance-badge`。
 
 **想自己发布一个标准来源**（不经过 1024Store）：社区市场支持「来源 → 添加标准来源」，只需要一个 manifest URL。它的契约要求 `transport.endpoint` 是**同源、HTTPS 443、路径以 `/v1/plugins` 结尾**、且返回 `application/json` 的 GET 接口 —— 静态文件托管（GitHub Pages / raw / jsDelivr）满足不了「路径以 `/v1/plugins` 结尾 + JSON content-type」这一条，所以要么起一个小服务（Worker / 函数计算），要么等 npm 发布后走内置的 1024Store 适配器。
 
