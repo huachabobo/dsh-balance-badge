@@ -37,7 +37,8 @@
   },
   "scripts": {
     "check": "node scripts/check-locales.mjs && node scripts/check-host-route.mjs && node scripts/smoke-test.mjs",
-    "check:composition": "node scripts/check-composition.mjs"
+    "check:composition": "node scripts/check-composition.mjs",
+    "prepublishOnly": "npm run check"
   },
   "devDependencies": {
     "react": "18.3.1",
