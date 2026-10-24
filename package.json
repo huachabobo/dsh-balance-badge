@@ -1,6 +1,6 @@
 {
   "name": "dsh-balance-badge",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Show the DeepSeek account balance right under the DSH composer, with a spend curve and per-session attribution",
   "type": "module",
   "main": "index.js",

@@ -23,6 +23,23 @@ window.__ModuleLoader__.load({
 			'.dbb_label{opacity:.85}',
 			'.dbb_value{min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--dsw-alias-label-secondary);font-weight:500}',
 			'.dbb_bonus{color:var(--dsw-alias-label-tertiary);font-weight:400}',
+			'.dbb_rate{display:inline-flex;align-items:center;gap:3px;flex:none;height:18px;padding:0 6px;border-radius:999px;background:var(--dsw-alias-interactive-bg-hover);font-size:10px;line-height:18px;font-weight:500;font-variant-numeric:tabular-nums;color:var(--dsw-alias-label-secondary)}',
+			'.dbb_rate[data-mode="peak"]{color:var(--dsw-alias-state-warn-primary)}',
+			'.dbb_rate[data-mode="off"]{color:var(--dsw-alias-state-success-primary)}',
+			'.dbb_rateMode{font-weight:600}',
+			'.dbb_price{margin-top:2px;padding-top:8px;border-top:.5px solid var(--dsw-alias-border-l1);display:flex;flex-direction:column;gap:5px;font-variant-numeric:tabular-nums}',
+			'.dbb_priceHead{display:flex;align-items:baseline;justify-content:space-between;gap:8px}',
+			'.dbb_priceTitle{color:var(--dsw-alias-label-tertiary);font-size:11px}',
+			'.dbb_priceMode{font-size:11px;font-weight:600}',
+			'.dbb_priceMode[data-mode="peak"]{color:var(--dsw-alias-state-warn-primary)}',
+			'.dbb_priceMode[data-mode="off"]{color:var(--dsw-alias-state-success-primary)}',
+			'.dbb_priceUntil{color:var(--dsw-alias-label-caption);font-size:10px;line-height:14px}',
+			'.dbb_priceGrid{display:grid;grid-template-columns:1fr 64px 64px;gap:2px 6px;align-items:baseline;font-size:11px;line-height:16px}',
+			'.dbb_priceGrid>span{color:var(--dsw-alias-label-tertiary)}',
+			'.dbb_priceGrid>b{text-align:right;color:var(--dsw-alias-label-tertiary);font-weight:400}',
+			'.dbb_priceGrid>b[data-active="true"]{color:var(--dsw-alias-label-primary);font-weight:600}',
+			'.dbb_priceCol{text-align:right;color:var(--dsw-alias-label-caption);font-size:10px;font-weight:400}',
+			'.dbb_priceNote{color:var(--dsw-alias-label-caption);font-size:10px;line-height:14px}',
 			'.dbb_chip[data-tone="warn"] .dbb_value,.dbb_chip[data-tone="error"] .dbb_value{color:inherit}',
 			'.dbb_dot{width:6px;height:6px;flex:none;border-radius:50%;background:currentColor;opacity:.45}',
 			'.dbb_chip[data-busy="true"] .dbb_dot{animation:dbb_pulse .9s ease-in-out infinite alternate}',
@@ -105,6 +122,40 @@ window.__ModuleLoader__.load({
 		];
 		//#endregion
 
+		//#region pricing
+		/**
+		 * Model prices in CNY per 1M tokens, taken from the official pricing page
+		 * (https://api-docs.deepseek.com/zh-cn/quick_start/pricing/). Off-peak is
+		 * exactly half of peak, which is how DeepSeek bills it.
+		 */
+		const MODEL_PRICING = {
+			"deepseek-flash": {
+				label: "DeepSeek-V4.1-Flash",
+				peak: { cacheHit: 0.04, cacheMiss: 2, output: 8 },
+				off: { cacheHit: 0.02, cacheMiss: 1, output: 4 }
+			},
+			"deepseek-v4-pro": {
+				label: "DeepSeek-V4-Pro",
+				peak: { cacheHit: 0.3, cacheMiss: 9, output: 27 },
+				off: { cacheHit: 0.15, cacheMiss: 4.5, output: 13.5 }
+			}
+		};
+		/** Model the badge prices: the desktop profile's default DeepSeek route. */
+		const PRICE_MODEL = "deepseek-flash";
+		/** Beijing time is the billing timezone, whatever the machine's zone is. */
+		const BEIJING_OFFSET_MS = 8 * 3600000;
+		/** Peak: Beijing Mon–Fri, minutes-of-day ranges. Everything else is off-peak. */
+		const PEAK_WINDOWS = [[9 * 60, 12 * 60], [14 * 60, 18 * 60]];
+		const PEAK_WEEKDAYS = new Set([1, 2, 3, 4, 5]);
+		/**
+		 * Chinese statutory holidays are off-peak all day. Add `"YYYY-MM-DD"` (Beijing
+		 * date) entries here — the badge cannot know the State Council calendar offline.
+		 */
+		const HOLIDAYS = new Set([]);
+		/** How far ahead the next billing switch is searched. */
+		const PRICE_LOOKAHEAD_MINUTES = 4 * 1440;
+		//#endregion
+
 		//#region dictionaries
 		const zh = {
 			"label": "余额",
@@ -121,6 +172,12 @@ window.__ModuleLoader__.load({
 			"tooltip.error": "上次刷新失败",
 			"tooltip.hint": "点击查看余额变化",
 			"tooltip.signedOut": "没有可用的账号登录状态，请到 设置 → 账号 完成登录",
+			"rate.peak": "峰",
+			"rate.off": "谷",
+			"rate.tooltip": "当前 {model} 输出价 {price}/百万 tokens（{mode}时段）",
+			"duration.d": "{days} 天 {hours} 小时",
+			"duration.hm": "{hours} 小时 {minutes} 分",
+			"duration.m": "{minutes} 分钟",
 			"aria": "DeepSeek 账号余额：{value}，点击查看余额变化",
 			"panel.aria": "余额变化",
 			"panel.title": "余额变化",
@@ -137,6 +194,17 @@ window.__ModuleLoader__.load({
 			"panel.topUp": "充值",
 			"panel.sessionSpend": "本会话消耗",
 			"panel.sessionTurns": "{count} 轮",
+			"panel.price.title": "模型价格",
+			"panel.price.peak": "高峰",
+			"panel.price.off": "空闲",
+			"panel.price.until": "距调价 {duration}",
+			"panel.price.cacheHit": "输入·命中",
+			"panel.price.cacheMiss": "输入·未命中",
+			"panel.price.output": "输出",
+			"panel.price.unit": "元 / 百万 tokens",
+			"panel.price.windows": "高峰＝北京时间 周一至周五 9:00–12:00、14:00–18:00；其余时段（含周末与法定节假日）空闲，空闲价 = 高峰价的一半。",
+			"panel.price.other": "另一模型 {model}：高峰 {peak} · 空闲 {off}",
+			"panel.price.source": "价格来源：DeepSeek 官方定价页（2026-10）",
 			"panel.maxDrop": "最大单次",
 			"panel.high": "最高",
 			"panel.low": "最低",
@@ -168,6 +236,12 @@ window.__ModuleLoader__.load({
 			"tooltip.error": "Last refresh failed",
 			"tooltip.hint": "Click for the balance history",
 			"tooltip.signedOut": "No account credential is available; sign in under Settings \u2192 Account",
+			"rate.peak": "Peak",
+			"rate.off": "Off",
+			"rate.tooltip": "Current {model} output price: {price} per 1M tokens ({mode} hours)",
+			"duration.d": "{days}d {hours}h",
+			"duration.hm": "{hours}h {minutes}m",
+			"duration.m": "{minutes}m",
 			"aria": "DeepSeek account balance: {value}. Click for the balance history.",
 			"panel.aria": "Balance history",
 			"panel.title": "Balance history",
@@ -184,6 +258,17 @@ window.__ModuleLoader__.load({
 			"panel.topUp": "Top up",
 			"panel.sessionSpend": "This session",
 			"panel.sessionTurns": "{count} turns",
+			"panel.price.title": "Model price",
+			"panel.price.peak": "Peak",
+			"panel.price.off": "Off-peak",
+			"panel.price.until": "Changes in {duration}",
+			"panel.price.cacheHit": "Input · cache hit",
+			"panel.price.cacheMiss": "Input · cache miss",
+			"panel.price.output": "Output",
+			"panel.price.unit": "CNY / 1M tokens",
+			"panel.price.windows": "Peak = Beijing time Mon\u2013Fri 09:00\u201312:00 and 14:00\u201318:00; every other hour, weekends and statutory holidays included, is off-peak at half the peak price.",
+			"panel.price.other": "Other model {model}: peak {peak} \u00b7 off-peak {off}",
+			"panel.price.source": "Source: DeepSeek official pricing page (2026-10)",
 			"panel.maxDrop": "Largest drop",
 			"panel.high": "High",
 			"panel.low": "Low",
@@ -279,6 +364,64 @@ window.__ModuleLoader__.load({
 		function signedMoney(currency, delta) {
 			const sign = delta > 0 ? "+" : delta < 0 ? "\u2212" : "";
 			return sign + money(currency, Math.abs(delta));
+		}
+		/** Wall-clock parts in Beijing time, independent of the machine's zone. */
+		function beijingClock(nowMs) {
+			const shifted = new Date(nowMs + new Date(nowMs).getTimezoneOffset() * 60000 + BEIJING_OFFSET_MS);
+			const pad = (value) => String(value).padStart(2, "0");
+			return {
+				weekday: shifted.getDay(),
+				minutes: shifted.getHours() * 60 + shifted.getMinutes(),
+				dateKey: `${shifted.getFullYear()}-${pad(shifted.getMonth() + 1)}-${pad(shifted.getDate())}`
+			};
+		}
+		/** Whether DeepSeek bills peak rates at that instant. */
+		function isPeakAt(nowMs) {
+			const clock = beijingClock(nowMs);
+			if (!PEAK_WEEKDAYS.has(clock.weekday) || HOLIDAYS.has(clock.dateKey)) return false;
+			return PEAK_WINDOWS.some(([start, end]) => clock.minutes >= start && clock.minutes < end);
+		}
+		/** First minute at which the billing tier flips, searched forward. */
+		function nextChangeAt(nowMs) {
+			const peak = isPeakAt(nowMs);
+			for (let step = 1; step <= PRICE_LOOKAHEAD_MINUTES; step += 1) {
+				const candidate = nowMs + step * 60000;
+				if (isPeakAt(candidate) !== peak) return candidate;
+			}
+			return nowMs + 86400000;
+		}
+		/** Billing state for one minute bucket; memoised so a render pass is cheap. */
+		let priceStateCache = {
+			bucket: -1,
+			value: null
+		};
+		function pricingNow(nowMs) {
+			const bucket = Math.floor(nowMs / 60000);
+			if (priceStateCache.bucket === bucket && priceStateCache.value !== null) return priceStateCache.value;
+			const value = {
+				peak: isPeakAt(nowMs),
+				nextChangeAt: nextChangeAt(nowMs)
+			};
+			priceStateCache = {
+				bucket,
+				value
+			};
+			return value;
+		}
+		/** `¥0.02` / `¥4.5` / `¥8` — the shortest honest form of a per-million price. */
+		function rateText(value) {
+			const symbol = SYMBOLS.CNY;
+			return symbol + String(value);
+		}
+		/** "3 小时 12 分" / "45 分钟" / "2 天 3 小时" for the countdown to the next tier. */
+		function durationText(t, ms) {
+			const total = Math.max(1, Math.round(ms / 60000));
+			const days = Math.floor(total / 1440);
+			const hours = Math.floor((total % 1440) / 60);
+			const minutes = total % 60;
+			if (days > 0) return t("duration.d", { days, hours });
+			if (hours > 0) return t("duration.hm", { hours, minutes });
+			return t("duration.m", { minutes });
 		}
 		//#endregion
 
@@ -761,6 +904,49 @@ window.__ModuleLoader__.load({
 			}
 		}
 		/**
+		 * Render the model price block: the live billing tier, the countdown to the
+		 * next switch, both tiers' prices, and where the numbers come from.
+		 * @param t - namespace translator.
+		 * @param pricing - current tier plus the instant it flips.
+		 * @returns the price section of the panel.
+		 */
+		function buildPriceBlock(t, pricing) {
+			const model = MODEL_PRICING[PRICE_MODEL] ?? MODEL_PRICING[Object.keys(MODEL_PRICING)[0]];
+			const other = Object.entries(MODEL_PRICING).find(([id]) => id !== PRICE_MODEL);
+			const summary = (config) => [config.cacheHit, config.cacheMiss, config.output].map(rateText).join(" / ");
+			const rows = [
+				["cacheHit", "panel.price.cacheHit"],
+				["cacheMiss", "panel.price.cacheMiss"],
+				["output", "panel.price.output"]
+			].flatMap(([field, key]) => [
+				h("span", { key: field }, t(key)),
+				h("b", { key: field + "-peak", "data-active": String(pricing.peak) }, rateText(model.peak[field])),
+				h("b", { key: field + "-off", "data-active": String(!pricing.peak) }, rateText(model.off[field]))
+			]);
+			return h("div", { key: "price", className: "dbb_price", "data-price-block": "" }, [
+				h("div", { key: "head", className: "dbb_priceHead" }, [
+					h("span", { key: "title", className: "dbb_priceTitle" }, t("panel.price.title") + " · " + model.label),
+					h("span", { key: "mode", className: "dbb_priceMode", "data-mode": pricing.peak ? "peak" : "off" }, t(pricing.peak ? "panel.price.peak" : "panel.price.off"))
+				]),
+				h("div", { key: "until", className: "dbb_priceUntil" }, t("panel.price.until", {
+					duration: durationText(t, pricing.nextChangeAt - Date.now())
+				})),
+				h("div", { key: "grid", className: "dbb_priceGrid" }, [
+					h("span", { key: "corner", className: "dbb_priceCol", style: { textAlign: "left" } }, t("panel.price.unit")),
+					h("span", { key: "col-peak", className: "dbb_priceCol" }, t("panel.price.peak")),
+					h("span", { key: "col-off", className: "dbb_priceCol" }, t("panel.price.off")),
+					...rows
+				]),
+				other === void 0 ? null : h("div", { key: "other", className: "dbb_priceNote" }, t("panel.price.other", {
+					model: other[1].label,
+					peak: summary(other[1].peak),
+					off: summary(other[1].off)
+				})),
+				h("div", { key: "windows", className: "dbb_priceNote" }, t("panel.price.windows")),
+				h("div", { key: "source", className: "dbb_priceNote" }, t("panel.price.source"))
+			]);
+		}
+		/**
 		 * Build the floating history panel: current split, range tabs, curve, and
 		 * the spend statistics for the selected window.
 		 * @param store - shared balance reader.
@@ -812,6 +998,7 @@ window.__ModuleLoader__.load({
 				const samplesText = t("panel.samples", { count: points.length });
 				const baseNote = note ?? (snapshot.updatedAt > 0 ? t("panel.updated", { time: stampText(snapshot.updatedAt) }) + " · " + samplesText : samplesText);
 				const footerNote = snapshot.refreshing ? baseNote + " · " + t("panel.refreshing") : baseNote;
+				const priceBlock = buildPriceBlock(t, pricingNow(Date.now()));
 				return h("div", { className: "dbb_body" }, [
 					h("div", { key: "head", className: "dbb_head" }, [
 						h("div", { key: "headText" }, [
@@ -859,6 +1046,7 @@ window.__ModuleLoader__.load({
 						h("span", { key: "hint" }, t("panel.emptyHint"))
 					]),
 					stats.length > 0 ? h("div", { key: "stats", className: "dbb_stats" }, stats) : null,
+					priceBlock,
 					h("div", { key: "footer", className: "dbb_footer" }, [
 						h("span", { key: "note", className: "dbb_footerNote" }, footerNote),
 						h("div", { key: "actions", className: "dbb_actions" }, [
@@ -986,7 +1174,20 @@ window.__ModuleLoader__.load({
 					if (totals.total < LOW_BALANCE) tone = "warn";
 				}
 				if (snapshot.error !== null && snapshot.phase === "ready") tone = "warn";
+				const pricing = pricingNow(Date.now());
+				const priceModel = MODEL_PRICING[PRICE_MODEL] ?? MODEL_PRICING[Object.keys(MODEL_PRICING)[0]];
+				const priceTier = pricing.peak ? priceModel.peak : priceModel.off;
+				const rateMode = t(pricing.peak ? "rate.peak" : "rate.off");
 				const children = [
+					h("span", {
+						key: "rate",
+						className: "dbb_rate",
+						"data-mode": pricing.peak ? "peak" : "off",
+						"aria-hidden": "true"
+					}, [
+						h("span", { key: "mode", className: "dbb_rateMode" }, rateMode),
+						h("span", { key: "value" }, rateText(priceTier.output) + "/M")
+					]),
 					h("span", { key: "dot", className: "dbb_dot", "aria-hidden": "true" }),
 					h("span", { key: "label", className: "dbb_label" }, t("label")),
 					h("span", { key: "value", className: "dbb_value" }, valueText)
@@ -995,6 +1196,11 @@ window.__ModuleLoader__.load({
 					children.push(h("span", { key: "bonus", className: "dbb_bonus" }, t("bonus", { amount: walletsText(bonus) })));
 				}
 				const lines = [t("tooltip.title")];
+				lines.push(t("rate.tooltip", {
+					model: priceModel.label,
+					price: rateText(priceTier.output),
+					mode: rateMode
+				}));
 				if (wallets.length > 0) lines.push(t("tooltip.recharge") + ": " + walletsText(wallets));
 				if (totals.bonus > 0) lines.push(t("tooltip.bonus") + ": " + walletsText(bonus));
 				if (sessionId !== void 0) {
@@ -1123,6 +1329,14 @@ window.__ModuleLoader__.load({
 		exports.name = "dsh-balance-badge";
 		exports.inject = inject;
 		exports.apply = apply;
+		/** Pure pricing math, exported for the offline test (no React involved). */
+		exports.__test = {
+			isPeakAt,
+			nextChangeAt,
+			pricingNow,
+			rateText,
+			durationText
+		};
 		return module.exports;
 	}
 });

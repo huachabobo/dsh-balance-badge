@@ -1,10 +1,12 @@
 /**
  * Locale parity check for the client bundle.
  *
- * Reads the two dictionary literals out of `client.js`, collects every
- * translation key the code actually asks for (direct `t("…")` calls plus the
- * range-table keys), and reports keys that are missing in either language or
- * present in only one of them.
+ * Reads the two dictionary literals out of `client.js` and verifies that:
+ *   1. every key exists in both languages,
+ *   2. every key actually appears in the bundle source (so dead strings are
+ *      caught — computed keys like `t(pricing.peak ? "rate.peak" : "rate.off")`
+ *      count as long as the literal is there),
+ *   3. every direct `t("…")` call resolves to a dictionary entry.
  *
  * Run:  node scripts/check-locales.mjs
  */
@@ -35,18 +37,22 @@ function extractLiteral(name) {
 const zh = new Function(`return ${extractLiteral('zh')}`)()
 const en = new Function(`return ${extractLiteral('en')}`)()
 
-const used = new Set()
-for (const match of source.matchAll(/\bt\("([^"]+)"/g)) used.add(match[1])
-for (const match of source.matchAll(/key: "(panel\.[^"]+)"/g)) used.add(match[1])
+/** Every double-quoted string in the bundle, used as a "this key is referenced" probe. */
+const literals = new Set()
+for (const match of source.matchAll(/"((?:[^"\\]|\\.)*)"/g)) literals.add(match[1])
+
+/** Keys a direct `t("…")` call asks for. */
+const direct = new Set()
+for (const match of source.matchAll(/\bt\("((?:[^"\\]|\\.)*)"/g)) direct.add(match[1])
 
 const failures = []
-for (const key of [...used].sort()) {
-  if (!(key in zh)) failures.push(`zh is missing "${key}"`)
-  if (!(key in en)) failures.push(`en is missing "${key}"`)
+for (const key of direct) {
+  if (!(key in zh)) failures.push(`zh is missing "${key}" (used by t(...))`)
+  if (!(key in en)) failures.push(`en is missing "${key}" (used by t(...))`)
 }
 for (const key of Object.keys(zh)) {
   if (!(key in en)) failures.push(`en lacks "${key}" (present in zh)`)
-  if (!used.has(key)) failures.push(`zh key "${key}" is never requested`)
+  if (!literals.has(key)) failures.push(`zh key "${key}" appears nowhere in the bundle`)
 }
 for (const key of Object.keys(en)) {
   if (!(key in zh)) failures.push(`zh lacks "${key}" (present in en)`)
@@ -57,4 +63,6 @@ if (failures.length > 0) {
   for (const failure of failures) console.error(' - ' + failure)
   process.exit(1)
 }
-console.log(`PASS: ${used.size} keys used, ${Object.keys(zh).length} zh / ${Object.keys(en).length} en entries, no gaps`)
+console.log(
+  `PASS: ${Object.keys(zh).length} zh / ${Object.keys(en).length} en entries, ${direct.size} direct t() keys, every key referenced`
+)

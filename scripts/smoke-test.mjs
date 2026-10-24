@@ -94,7 +94,24 @@ const zh = {
   'panel.needMore': '再记录 1 个采样点就能画曲线',
   'panel.chartAria': '余额变化曲线：{from} 至 {to}',
   'panel.close': '关闭',
-  'panel.cleared': '已清空记录'
+  'panel.cleared': '已清空记录',
+  'rate.peak': '峰',
+  'rate.off': '谷',
+  'rate.tooltip': '当前 {model} 输出价 {price}/百万 tokens（{mode}时段）',
+  'duration.d': '{days} 天 {hours} 小时',
+  'duration.hm': '{hours} 小时 {minutes} 分',
+  'duration.m': '{minutes} 分钟',
+  'panel.price.title': '模型价格',
+  'panel.price.peak': '高峰',
+  'panel.price.off': '空闲',
+  'panel.price.until': '距调价 {duration}',
+  'panel.price.cacheHit': '输入·命中',
+  'panel.price.cacheMiss': '输入·未命中',
+  'panel.price.output': '输出',
+  'panel.price.unit': '元 / 百万 tokens',
+  'panel.price.windows': '高峰＝北京时间 周一至周五 9:00–12:00、14:00–18:00；其余时段（含周末与法定节假日）空闲，空闲价 = 高峰价的一半。',
+  'panel.price.other': '另一模型 {model}：高峰 {peak} · 空闲 {off}',
+  'panel.price.source': '价格来源：DeepSeek 官方定价页（2026-10）'
 }
 const t = (key, params) =>
   (zh[key] ?? key).replace(/\{(\w+)\}/g, (match, name) => (params && name in params ? String(params[name]) : match))
@@ -223,8 +240,8 @@ const scenarios = [
   {
     name: 'ready',
     account: { state: credentialStored, balance: readyBalance },
-    expect: ['余额', '¥110.00', '＋赠金 ¥10.00', 'data-tone="normal"'],
-    panelExpect: ['余额变化', '充值', '合计', '立即刷新', '清空记录', '再记录 1 个采样点', 'data-variant="primary"', '>充值</button>', '本会话消耗', '¥0.00', '0 轮'],
+    expect: ['余额', '¥110.00', '＋赠金 ¥10.00', 'data-tone="normal"', 'dbb_rate', '/M'],
+    panelExpect: ['余额变化', '充值', '合计', '立即刷新', '清空记录', '再记录 1 个采样点', 'data-variant="primary"', '>充值</button>', '本会话消耗', '¥0.00', '0 轮', 'data-price-block', '模型价格', '高峰', '空闲', '距调价', '输入·命中', '输入·未命中', '输出', '¥8', '¥4'],
     panelAbsent: ['panel.topUp']
   },
   {
@@ -324,6 +341,35 @@ const bundle = await loadBundle()
 if (bundle.name !== 'dsh-balance-badge') failures.push(`unexpected plugin name: ${bundle.name}`)
 if (!Array.isArray(bundle.inject) || !bundle.inject.includes('slots')) failures.push('plugin does not inject slots')
 if (typeof bundle.apply !== 'function') failures.push('plugin has no apply()')
+
+// Peak/off-peak billing math, driven by fixed Beijing timestamps.
+const pricing = bundle.__test
+if (pricing === undefined) failures.push('plugin exposes no pricing test hook')
+else {
+  const beijing = (month, day, hour, minute) => Date.UTC(2026, month - 1, day, hour - 8, minute)
+  const cases = [
+    ['Mon 10:00 peak', beijing(10, 26, 10, 0), true],
+    ['Mon 11:59 peak', beijing(10, 26, 11, 59), true],
+    ['Mon 12:00 off', beijing(10, 26, 12, 0), false],
+    ['Mon 13:59 off', beijing(10, 26, 13, 59), false],
+    ['Mon 14:00 peak', beijing(10, 26, 14, 0), true],
+    ['Mon 17:59 peak', beijing(10, 26, 17, 59), true],
+    ['Mon 18:00 off', beijing(10, 26, 18, 0), false],
+    ['Sun 10:00 off', beijing(10, 25, 10, 0), false],
+    ['Sat 15:00 off', beijing(10, 24, 15, 0), false]
+  ]
+  for (const [label, at, expected] of cases) {
+    const actual = pricing.isPeakAt(at)
+    if (actual !== expected) failures.push(`pricing: ${label} should be ${expected ? 'peak' : 'off-peak'}`)
+  }
+  const flipsToNoon = pricing.nextChangeAt(beijing(10, 26, 11, 0))
+  if (flipsToNoon !== beijing(10, 26, 12, 0)) failures.push('pricing: 11:00 should flip at 12:00')
+  const flipsToLunchEnd = pricing.nextChangeAt(beijing(10, 26, 13, 0))
+  if (flipsToLunchEnd !== beijing(10, 26, 14, 0)) failures.push('pricing: 13:00 should flip at 14:00')
+  const fridayEvening = pricing.nextChangeAt(beijing(10, 23, 18, 30))
+  if (fridayEvening !== beijing(10, 26, 9, 0)) failures.push('pricing: Friday evening should flip at Monday 09:00')
+  if (pricing.rateText(0.02) !== '¥0.02' || pricing.rateText(4.5) !== '¥4.5') failures.push('pricing: rate formatting is off')
+}
 
 for (const scenario of scenarios) {
   storage.clear()
